@@ -5,6 +5,3 @@
 [submodule "deps/doxygen-lua"]
 	path = deps/doxygen-lua
 	url = https://github.com/scholzd/doxygen-lua.git
-[submodule "deps/mtcp"]
-	path = deps/mtcp
-	url = https://github.com/eunyoung14/mtcp.git
