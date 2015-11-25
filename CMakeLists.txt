@@ -24,6 +24,7 @@ SET(FILES
 	src/pipe.cpp
 	src/lock.cpp
 	src/namespaces.cpp
+	src/mtcp_test.c
 )
 
 SET(DPDK_LIBS
@@ -37,8 +38,13 @@ SET(LUAJIT_LIBS
 	luajit
 )
 
+SET(MTCP_LIBS
+	mtcp	numa
+)
+
 SET(ALL_LIBS
 	${LUAJIT_LIBS}
+	${MTCP_LIBS}
 	-Wl,--start-group ${DPDK_LIBS} -Wl,--end-group
 	pthread dl rt
 )
@@ -51,12 +57,16 @@ INCLUDE_DIRECTORIES(
 	 ${CMAKE_CURRENT_SOURCE_DIR}/deps/dpdk/lib/librte_pmd_i40e
 	 ${CMAKE_CURRENT_SOURCE_DIR}/deps/luajit/src
 	 ${CMAKE_CURRENT_SOURCE_DIR}/lib
+	 ${CMAKE_CURRENT_SOURCE_DIR}/deps/mtcp/mtcp/lib
+	 ${CMAKE_CURRENT_SOURCE_DIR}/deps/mtcp/mtcp/src/include
 )
 
 LINK_DIRECTORIES(
 	${CMAKE_CURRENT_SOURCE_DIR}/deps/dpdk/x86_64-native-linuxapp-gcc/lib
 	${CMAKE_CURRENT_SOURCE_DIR}/deps/luajit/usr/local/lib/
 	${CMAKE_CURRENT_SOURCE_DIR}/deps/luajit/src
+	${CMAKE_CURRENT_SOURCE_DIR}/deps/mtcp/mtcp/src
+	${CMAKE_CURRENT_SOURCE_DIR}/deps/mtcp/mtcp/lib
 )
 
 ADD_EXECUTABLE(${PRJ} ${FILES})
