@@ -17,6 +17,7 @@
 
 #include <mtcp_api.h>
 #include <mtcp_epoll.h>
+#include "cpu.h"
 
 //GLOBALS
 #define MAX_CORES 4
@@ -86,6 +87,8 @@ struct wget_vars
 
 thread_context_t CreateContext(int core)
 {
+	mtcp_init("mtcp.conf");
+
 	thread_context_t ctx;
 
 	ctx = (thread_context_t)calloc(1, sizeof(struct thread_context));
@@ -181,6 +184,16 @@ void* SlaveMain(void* args)
 int TCPSend(thread_context_t ctx, int socket, const char* buffer, int len)
 {
 	return mtcp_write(ctx->mctx, socket, buffer, len);
+}
+
+void WriteCoreLimit()
+{
+	struct mtcp_conf mcfg;
+	int num_cores = GetNumCPUs();
+	int core_limit = num_cores;
+	mtcp_getconf(&mcfg);
+	mcfg.num_cores = core_limit;
+	mtcp_setconf(&mcfg);
 }
 
 int MTCP_TEST_main()

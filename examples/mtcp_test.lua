@@ -11,13 +11,11 @@ function master(...)
 	--	return log:info("usage: txPort rxPort [rate [flows [pktSize]]]")
 	--end
 	
-	ip = "10.0.0.1"
-	port = 6112
-	
 	flows = flows or 4
 	rate = rate or 2000
 	size = (size or 124)
 
+	mtcp.WriteCoreLimit()
 	log:info("launching slave...")
 	dpdk.launchLuaOnCore(1, "loadSlave", 1, size)
 	log:info("thread launched, waiting...")
@@ -34,14 +32,17 @@ function loadSlave(core, size)
 	end)
 	local payload = mem:bufArray()
 	log:info("creating context...")
-	local context = mtcp:CreateContext(core)
+	local context = mtcp.CreateContext(core)
 	log:info("establishing socket...")
-	local socket = mtcp:TCPConnect(context, ip, port)
+	
+	local ip = "10.0.0.1"
+	local port = 6112
+	local socket = mtcp.TCPConnect(context, ip, port)
 	local counter = 0
 	log:info("start sending 0x09 spam...")
 	while counter < 100 do
 		counter = counter + 1
-		mtcp:TCPSend(context, socket, payload, size)
+		mtcp.TCPSend(context, socket, payload, size)
 	end
 	log:info("done sending, destroying context...")
 	mtcp.DestroyContext(context)
