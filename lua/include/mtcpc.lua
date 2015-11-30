@@ -41,8 +41,11 @@ ffi.cdef[[
 --functions
 ffi.cdef[[
 	
-	struct thread_context *CreateContext(int core);
+	struct thread_context* CreateContext(int core);
 	void DestroyContext(struct thread_context *ctx);
 	int TCPConnect(struct thread_context *ctx, const char* ip, int port);
 	int TCPSend(struct thread_context *ctx, int socket, const char* buffer, int len);
+	void WriteCoreLimit();
 ]]
+
+return ffi.C
