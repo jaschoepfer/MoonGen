@@ -30,6 +30,7 @@ make
 #make
 #MAKE MOONGEN
 cd $moongendir/build
+make clean
 cmake ..
 make
 )
