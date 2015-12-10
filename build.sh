@@ -25,6 +25,7 @@ echo "MAKING MTCP..."
 cd  $moongendir/deps/mtcp
 ./configure --with-dpdk-lib=$moongendir/deps/dpdk/x86_64-native-linuxapp-gcc
 cd mtcp/src
+make clean
 make
 #cd ../../util
 #make

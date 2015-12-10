@@ -17,7 +17,6 @@
 
 #include <mtcp_api.h>
 #include <mtcp_epoll.h>
-#include "cpu.h"
 
 //GLOBALS
 #define MAX_CORES 4
@@ -87,8 +86,6 @@ struct wget_vars
 
 thread_context_t CreateContext(int core)
 {
-	mtcp_init("mtcp.conf");
-
 	thread_context_t ctx;
 
 	ctx = (thread_context_t)calloc(1, sizeof(struct thread_context));
@@ -119,12 +116,14 @@ int TCPConnect(thread_context_t ctx, const char* ip, int port)
 	
 	//CREATE SOCKET
 	//1: mctx_t, domain, type, protocol
+	printf("LOADING SOCKET\n");
 	int sockid = mtcp_socket(ctx->mctx, AF_INET, SOCK_STREAM, 0);
 	if (sockid < 0) {
 		return -1;
 	}
 	
 	//RESERVE MEMORY FOR STATS
+	printf("RESERVE MEMORY\n");
 	memset(&ctx->wvars[sockid], 0, sizeof(struct wget_vars));
 	int ret = mtcp_setsock_nonblock(ctx->mctx, sockid);
 	if (ret < 0) {
@@ -138,7 +137,9 @@ int TCPConnect(thread_context_t ctx, const char* ip, int port)
 	
 	//CONNECT
 	//mctx, socket_id, struct sockaddr*, struct sockaddr_in/out size
+	printf("CONNECTING...\n");
 	ret = mtcp_connect(ctx->mctx, sockid, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
+	printf("CONNECTED: %i\n", ret);
 	if (ret < 0) {
 		mtcp_close(ctx->mctx, sockid);
 		return -1;
@@ -184,16 +185,6 @@ void* SlaveMain(void* args)
 int TCPSend(thread_context_t ctx, int socket, const char* buffer, int len)
 {
 	return mtcp_write(ctx->mctx, socket, buffer, len);
-}
-
-void WriteCoreLimit()
-{
-	struct mtcp_conf mcfg;
-	int num_cores = GetNumCPUs();
-	int core_limit = num_cores;
-	mtcp_getconf(&mcfg);
-	mcfg.num_cores = core_limit;
-	mtcp_setconf(&mcfg);
 }
 
 int MTCP_TEST_main()
