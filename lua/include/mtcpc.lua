@@ -10,7 +10,7 @@ ffi.cdef[[
 	{
 		int core;
 
-		struct mctp_context *mctx;
+		struct mtcp_context *mctx;
 		int ep;
 		struct wget_vars *wvars;
 
@@ -43,9 +43,10 @@ ffi.cdef[[
 	
 	struct thread_context* CreateContext(int core);
 	void DestroyContext(struct thread_context *ctx);
-	int TCPConnect(struct thread_context *ctx, const char* ip, int port);
+	int TCPConnect(struct thread_context *ctx, const char* src_ip,  const char* dst_ip, int port);
 	int TCPSend(struct thread_context *ctx, int socket, const char* buffer, int len);
 	void WriteCoreLimit();
+	void InitMTCP(const char* config_file);
 ]]
 
 return ffi.C

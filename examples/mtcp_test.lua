@@ -11,24 +11,27 @@ function master(...)
 	--	return log:info("usage: txPort rxPort [rate [flows [pktSize]]]")
 	--end
 	
-	ip = "10.0.0.1"
+	src_ip = "10.0.0.2"
+	dst_ip = "10.0.0.1"
 	port = 6112
 	
 	flows = flows or 4
 	rate = rate or 2000
 	size = (size or 124)
 
+	mtcp.InitMTCP("mtcp.conf")
 	log:info("creating context...")
 	local context = mtcp.CreateContext(1)
 	
 	log:info("launching slave...")
-	dpdk.launchLuaOnCore(7, "loadSlave", 7, size, context, ip, port)
+	local task = dpdk.launchLuaOnCore(7, "loadSlave", size, src_ip, dst_ip, port, context)
+	log:info("TASKID:" .. task.id)
 	log:info("thread launched, waiting...")
 	dpdk.waitForSlaves()
 	log:info("waiting finished")
 end
 
-function loadSlave(core, size, context, ip, port)
+function loadSlave(size, src_ip, dst_ip, port, context)
 	log:info("slave launched")
 	local mem = memory.createMemPool(function(buf)
 		local data = ffi.cast("uint8_t*", buf.pkt.data)
@@ -38,7 +41,7 @@ function loadSlave(core, size, context, ip, port)
 	end)
 	local payload = mem:bufArray()
 	log:info("establishing socket...")
-	local socket = mtcp.TCPConnect(context, ip, port)
+	local socket = mtcp.TCPConnect(context, src_ip, dst_ip, port)
 	local counter = 0
 	log:info("start sending 0x09 spam...")
 	while counter < 100 do

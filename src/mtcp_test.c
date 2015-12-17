@@ -53,6 +53,7 @@ struct thread_context
 
 	mctx_t mctx;
 	int ep;
+	int wvar_size;
 	struct wget_vars *wvars;
 
 	int target;
@@ -93,11 +94,15 @@ thread_context_t CreateContext(int core)
 		return NULL;
 	}
 	ctx->core = core;
-
+	
+	
 	ctx->mctx = mtcp_create_context(core);
 	if (!ctx->mctx) {
 		return NULL;
 	}
+	ctx->wvar_size = 1;
+	ctx->wvars = (struct wget_vars*)calloc(ctx->wvar_size, sizeof(struct wget_vars));
+	
 	g_mctx[core] = ctx->mctx;
 
 	return ctx;
@@ -109,11 +114,33 @@ void DestroyContext(thread_context_t ctx)
 	free(ctx);
 }
 
-int TCPConnect(thread_context_t ctx, const char* ip, int port)
+void InitMTCP(const char* config_file)
 {
-	struct mtcp_epoll_event ev;
-	struct sockaddr_in addr;
+	printf("! Initializing MTCP...");
+	int max_concurrency = 300;
+	int core_limit = GetNumCPUs();
 	
+	//Set Core Limit & max fds
+	struct mtcp_conf mcfg;
+	mtcp_getconf(&mcfg);
+	mcfg.num_cores = core_limit;
+	mcfg.max_concurrency = max_concurrency;
+	mcfg.max_num_buffers = max_concurrency;
+	mtcp_setconf(&mcfg);
+	
+	
+	mtcp_init(config_file);
+}
+
+int TCPConnect(thread_context_t ctx, const char* src_ip, const char* dst_ip, int port)
+{
+	int flows = 1;
+	int maxevents = 900;
+	
+	int ep;
+	if(!ctx)
+		printf("ERROR: thread_context is NULL\n");
+	printf("core=%i", ctx->core);
 	//CREATE SOCKET
 	//1: mctx_t, domain, type, protocol
 	printf("LOADING SOCKET\n");
@@ -124,21 +151,45 @@ int TCPConnect(thread_context_t ctx, const char* ip, int port)
 	
 	//RESERVE MEMORY FOR STATS
 	printf("RESERVE MEMORY\n");
+	printf("sockid=%i\n", sockid);
+	if(ctx->wvar_size <= sockid)
+	{
+		struct wget_vars *old_vars = ctx->wvars;
+		ctx->wvars = (struct wget_vars*)calloc((ctx->wvar_size*2), sizeof(struct wget_vars));
+		memcpy(old_vars, ctx->wvars, ctx->wvar_size*sizeof(struct wget_vars));
+		ctx->wvar_size*=2;
+	}
+	
+	//Init mtcp stuff
+	mtcp_init_rss(ctx->mctx, inet_addr(src_ip), flows, inet_addr(dst_ip), port);
+	ctx->target = flows;
+	
+	ep = mtcp_epoll_create(ctx->mctx, maxevents);
+	ctx->ep = ep;
+	
+	ctx->started = ctx->done = ctx->pending = 0;
+	ctx->errors = ctx->incompletes = 0;
+	
+	// ==== Create Connection ====
+	struct mtcp_epoll_event ev;
+	struct sockaddr_in *addr = calloc(1,sizeof(struct sockaddr_in));
+	
 	memset(&ctx->wvars[sockid], 0, sizeof(struct wget_vars));
+	printf("mtcp_setsock_nonblock...\n");
 	int ret = mtcp_setsock_nonblock(ctx->mctx, sockid);
 	if (ret < 0) {
 		exit(-1);
 	}
 	
 	//SET PORT IPCONFIG
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = inet_addr(ip);
-	addr.sin_port = port;
+	addr->sin_family = AF_INET;
+	addr->sin_addr.s_addr = inet_addr(dst_ip);
+	addr->sin_port = port;
 	
 	//CONNECT
 	//mctx, socket_id, struct sockaddr*, struct sockaddr_in/out size
 	printf("CONNECTING...\n");
-	ret = mtcp_connect(ctx->mctx, sockid, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
+	ret = mtcp_connect(ctx->mctx, sockid, (struct sockaddr *)addr, sizeof(struct sockaddr_in));
 	printf("CONNECTED: %i\n", ret);
 	if (ret < 0) {
 		mtcp_close(ctx->mctx, sockid);
@@ -162,7 +213,7 @@ void* SlaveMain(void* args)
 {
 	struct thread_args th_args = *(struct thread_args*)args;
 	thread_context_t ctx = CreateContext(th_args.core);
-	int sockid = TCPConnect(ctx, th_args.ip, th_args.port);
+	//int sockid = TCPConnect(ctx, th_args.ip, th_args.port);
 	
 	//set the payload
 	const char* buffer = "2357";
@@ -173,7 +224,7 @@ void* SlaveMain(void* args)
 	int packetCount = 1000;
 	while(i++ < packetCount)
 	{
-		mtcp_write(ctx->mctx, sockid, buffer, len);
+//		mtcp_write(ctx->mctx, sockid, buffer, len);
 	}
 	
 	DestroyContext(ctx);
