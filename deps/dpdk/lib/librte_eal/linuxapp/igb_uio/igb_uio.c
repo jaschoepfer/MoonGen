@@ -31,12 +31,11 @@
 #include <linux/io.h>
 #include <linux/msi.h>
 #include <linux/version.h>
-
+#include "igb_uio.h"
 #ifdef CONFIG_XEN_DOM0
 #include <xen/xen.h>
 #endif
 #include <rte_pci_dev_features.h>
-
 #include "compat.h"
 
 #ifdef RTE_PCI_CONFIG
@@ -55,10 +54,12 @@ struct rte_uio_pci_dev {
 	struct uio_info info;
 	struct pci_dev *pdev;
 	enum rte_intr_mode mode;
+	struct net_adapter *adapter;
 };
 
 static char *intr_mode = NULL;
 static enum rte_intr_mode igbuio_intr_mode_preferred = RTE_INTR_MODE_MSIX;
+struct stats_struct sarrays[MAX_DEVICES][MAX_QID] = {{{0, 0, 0, 0, 0, 0}}};
 
 static inline struct rte_uio_pci_dev *
 igbuio_get_uio_pci_dev(struct uio_info *info)
@@ -83,11 +84,7 @@ store_max_vfs(struct device *dev, struct device_attribute *attr,
 	unsigned long max_vfs;
 	struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 2, 0)
 	if (0 != strict_strtoul(buf, 0, &max_vfs))
-#else
-	if (0 != kstrtoul(buf, 0, &max_vfs))
-#endif
 		return -EINVAL;
 
 	if (0 == max_vfs)
@@ -291,9 +288,7 @@ igbuio_dom0_mmap_phys(struct uio_info *info, struct vm_area_struct *vma)
 
 	idx = (int)vma->vm_pgoff;
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-#if defined(HAVE_PTE_MASK_PAGE_IOMAP)
 	vma->vm_page_prot.pgprot |= _PAGE_IOMAP;
-#endif
 
 	return remap_pfn_range(vma,
 			vma->vm_start,
@@ -440,6 +435,14 @@ igbuio_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	struct rte_uio_pci_dev *udev;
 	struct msix_entry msix_entry;
 	int err;
+	
+	/* essential vars for configuring the device with net_device */
+	struct net_device *netdev;
+	struct net_adapter *adapter = NULL;
+	struct ixgbe_hw *hw_i = NULL;
+	struct e1000_hw *hw_e = NULL;
+	static int cards_found = 0;
+
 
 	udev = kzalloc(sizeof(struct rte_uio_pci_dev), GFP_KERNEL);
 	if (!udev)
@@ -536,6 +539,54 @@ igbuio_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if (err != 0)
 		goto fail_release_iomem;
 
+	/* initialize the corresponding netdev */
+	netdev = alloc_etherdev(sizeof(struct net_adapter));
+	if (!netdev) {
+		err = -ENOMEM;
+		goto fail_alloc_etherdev;
+	}
+	SET_NETDEV_DEV(netdev, pci_dev_to_dev(dev));
+	adapter = netdev_priv(netdev);
+	adapter->netdev = netdev;
+	adapter->pdev = dev;
+	udev->adapter = adapter;
+	adapter->type = retrieve_dev_specs(id);
+	/* recover device-specific mac address */
+	switch (adapter->type) {
+	case IXGBE:
+		hw_i = &adapter->hw._ixgbe_hw;
+		hw_i->back = adapter;
+		hw_i->hw_addr = ioremap(pci_resource_start(dev, 0),
+				       pci_resource_len(dev, 0));
+		if (!hw_i->hw_addr) {
+			err = -EIO;
+			goto fail_ioremap;
+		}
+		break;
+	case IGB:
+		hw_e = &adapter->hw._e1000_hw;
+		hw_e->back = adapter;
+		hw_e->hw_addr = ioremap(pci_resource_start(dev, 0),
+				      pci_resource_len(dev, 0));
+		if (!hw_e->hw_addr) {
+			err = -EIO;
+			goto fail_ioremap;
+		}
+		break;
+	}
+
+	netdev_assign_netdev_ops(netdev);
+	strncpy(netdev->name, pci_name(dev), sizeof(netdev->name) - 1);
+	adapter->bd_number = cards_found;
+	//netdev->ifindex = cards_found;
+	cards_found++;
+	retrieve_dev_addr(netdev, adapter);
+	strcpy(netdev->name, "dpdk%d");
+	err = register_netdev(netdev);
+	if (err)
+		goto fail_ioremap;
+	adapter->netdev_registered = true;
+
 	/* register uio driver */
 	err = uio_register_device(&dev->dev, &udev->info);
 	if (err != 0)
@@ -546,18 +597,26 @@ igbuio_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	dev_info(&dev->dev, "uio device registered with irq %lx\n",
 		 udev->info.irq);
 
-	return 0;
+	/* reset nstats */
+	memset(&adapter->nstats, 0, sizeof(struct net_device_stats));
 
-fail_remove_group:
+	return 0;
+	
+ fail_ioremap:
+	free_netdev(netdev);
+ fail_alloc_etherdev:
+	pci_release_selected_regions(dev,
+                                     pci_select_bars(dev, IORESOURCE_MEM));
+ fail_remove_group:
 	sysfs_remove_group(&dev->dev.kobj, &dev_attr_grp);
-fail_release_iomem:
+ fail_release_iomem:
 	igbuio_pci_release_iomem(&udev->info);
 	if (udev->mode == RTE_INTR_MODE_MSIX)
 		pci_disable_msix(udev->pdev);
 	pci_release_regions(dev);
-fail_disable:
+ fail_disable:
 	pci_disable_device(dev);
-fail_free:
+ fail_free:
 	kfree(udev);
 
 	return err;
@@ -568,6 +627,22 @@ igbuio_pci_remove(struct pci_dev *dev)
 {
 	struct uio_info *info = pci_get_drvdata(dev);
 	struct rte_uio_pci_dev *udev = igbuio_get_uio_pci_dev(info);
+
+	/* unregister device from netdev */
+	struct net_device *netdev = udev->adapter->netdev;
+	if (udev->adapter->netdev_registered) {
+		unregister_netdev(netdev);
+		udev->adapter->netdev_registered = false;
+	}
+	switch (udev->adapter->type) {
+	case IXGBE:
+		iounmap(udev->adapter->hw._ixgbe_hw.hw_addr);
+		break;
+	case IGB:
+		iounmap(udev->adapter->hw._ixgbe_hw.hw_addr);
+		break;
+	}
+	free_netdev(netdev);
 
 	if (info->priv == NULL) {
 		pr_notice("Not igbuio device\n");
@@ -607,6 +682,62 @@ igbuio_config_intr_mode(char *intr_str)
 	return 0;
 }
 
+static int
+update_stats(struct stats_struct __user *stats)
+{
+	uint8_t qid = stats->qid;
+	uint8_t device = stats->dev;
+
+	sarrays[device][qid].rx_bytes = stats->rx_bytes;
+	sarrays[device][qid].rx_pkts = stats->rx_pkts;
+	sarrays[device][qid].tx_bytes = stats->tx_bytes;
+	sarrays[device][qid].tx_pkts = stats->tx_pkts;
+
+#if 0
+	printk(KERN_ALERT "Dev: %d, Qid: %d, RXP: %llu, RXB: %llu, TXP: %llu, TXB: %llu\n",
+	       device, qid,
+	       (long long unsigned int)sarrays[device][qid].rx_pkts,
+	       (long long unsigned int)sarrays[device][qid].rx_bytes,
+	       (long long unsigned int)sarrays[device][qid].tx_pkts,
+	       (long long unsigned int)sarrays[device][qid].tx_bytes);
+#endif
+	return 0;
+}
+
+int
+igb_net_open(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+
+int
+igb_net_release(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+
+long
+igb_net_ioctl(struct file *filp,
+	 unsigned int cmd, unsigned long arg)
+{
+	int ret = 0;
+
+	switch (cmd) {
+	case SEND_STATS:
+		ret = update_stats((struct stats_struct __user *) arg);
+		break;
+	default:
+		ret = -ENOTTY;
+	}
+	return ret;
+}
+
+static struct file_operations igb_net_fops = {
+	.open = igb_net_open,
+	.release = igb_net_release,
+	.unlocked_ioctl = igb_net_ioctl,
+};
+
 static struct pci_driver igbuio_pci_driver = {
 	.name = "igb_uio",
 	.id_table = NULL,
@@ -623,12 +754,23 @@ igbuio_pci_init_module(void)
 	if (ret < 0)
 		return ret;
 
+	ret = register_chrdev(MAJOR_NO/* MAJOR */,
+			      DEV_NAME /*NAME*/,
+			      &igb_net_fops);
+	if (ret < 0) {
+		printk(KERN_ERR "register_chrdev failed\n");
+		return ret;
+	}
+
 	return pci_register_driver(&igbuio_pci_driver);
 }
 
 static void __exit
 igbuio_pci_exit_module(void)
 {
+	unregister_chrdev(MAJOR_NO /* MAJOR */,
+			  DEV_NAME /* NAME*/);
+
 	pci_unregister_driver(&igbuio_pci_driver);
 }
 
