@@ -11,8 +11,8 @@ function master(...)
 	--	return log:info("usage: txPort rxPort [rate [flows [pktSize]]]")
 	--end
 	
-	src_ip = "10.0.0.2"
-	dst_ip = "10.0.0.1"
+	src_ip = "10.0.14.3"
+	dst_ip = "10.0.15.3"
 	port = 6112
 	
 	flows = flows or 4
@@ -33,6 +33,7 @@ end
 
 function loadSlave(size, src_ip, dst_ip, port, context)
 	log:info("slave launched")
+	--[[
 	local mem = memory.createMemPool(function(buf)
 		local data = ffi.cast("uint8_t*", buf.pkt.data)
 		for i = 0, size do
@@ -40,10 +41,12 @@ function loadSlave(size, src_ip, dst_ip, port, context)
 		end
 	end)
 	local payload = mem:bufArray()
+	--]]
+	local payload = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	log:info("establishing socket...")
 	local socket = mtcp.TCPConnect(context, src_ip, dst_ip, port)
 	local counter = 0
-	log:info("start sending 0x09 spam...")
+	log:info("start sending AAAAA spam...")
 	while counter < 100 do
 		counter = counter + 1
 		mtcp.TCPSend(context, socket, payload, size)

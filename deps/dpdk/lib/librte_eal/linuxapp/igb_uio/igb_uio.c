@@ -581,6 +581,7 @@ igbuio_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	//netdev->ifindex = cards_found;
 	cards_found++;
 	retrieve_dev_addr(netdev, adapter);
+	//printf("++++++++++++++++++++++DEVICE NAME SET+++++++++++++++++++++++");//uncommented because compile errors
 	strcpy(netdev->name, "dpdk%d");
 	err = register_netdev(netdev);
 	if (err)

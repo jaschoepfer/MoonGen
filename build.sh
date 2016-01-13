@@ -14,12 +14,14 @@ then
 	exit 1
 fi
 #install luajit
+#make clean
 make -j 8 'CFLAGS=-DLUAJIT_NUMMODE=2 -DLUAJIT_ENABLE_LUA52COMPAT'
 make install DESTDIR=$(pwd)
 #install dpdk
 cd $moongendir/deps/dpdk
 make -j 8 install T=x86_64-native-linuxapp-gcc
 ../../bind-interfaces.sh
+/bin/bash tools/setup_iface_single_process.sh 3
 #install mtcp
 echo "MAKING MTCP..."
 cd  $moongendir/deps/mtcp
