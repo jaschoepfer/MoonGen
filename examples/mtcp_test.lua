@@ -11,8 +11,8 @@ function master(...)
 	--	return log:info("usage: txPort rxPort [rate [flows [pktSize]]]")
 	--end
 	
-	src_ip = "10.0.14.3"
-	dst_ip = "10.0.15.3"
+	src_ip = "10.0.13.3"
+	dst_ip = "10.0.13.4"
 	port = 6112
 	
 	flows = flows or 4
@@ -24,7 +24,7 @@ function master(...)
 	local context = mtcp.CreateContext(1)
 	
 	log:info("launching slave...")
-	local task = dpdk.launchLuaOnCore(7, "loadSlave", size, src_ip, dst_ip, port, context)
+	local task = dpdk.launchLuaOnCore(2, "loadSlave", size, src_ip, dst_ip, port, context)
 	log:info("TASKID:" .. task.id)
 	log:info("thread launched, waiting...")
 	dpdk.waitForSlaves()

@@ -47,6 +47,7 @@ ffi.cdef[[
 	int TCPSend(struct thread_context *ctx, int socket, const char* buffer, int len);
 	void WriteCoreLimit();
 	void InitMTCP(const char* config_file);
+	int SetSocketNonBlock(struct thread_context* ctx, int sockId);
 ]]
 
 return ffi.C

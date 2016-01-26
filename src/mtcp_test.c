@@ -132,6 +132,16 @@ void InitMTCP(const char* config_file)
 	mtcp_init(config_file);
 }
 
+int SetSocketNonBlock(thread_context_t ctx, int sockId)
+{
+	int ret = mtcp_setsock_nonblock(ctx->mctx, sockId);
+	if (ret < 0) {
+		printf("ERROR: Unable to set socket to \"nonblock\"\n"); 
+		return -1;
+	}
+	return ret;
+}
+
 int TCPConnect(thread_context_t ctx, const char* src_ip, const char* dst_ip, int port)
 {
 	int flows = 1;
@@ -147,7 +157,7 @@ int TCPConnect(thread_context_t ctx, const char* src_ip, const char* dst_ip, int
 	int sockid = mtcp_socket(ctx->mctx, AF_INET, SOCK_STREAM, 0);
 	if (sockid < 0) {
 		return -1;
-	}
+	} 
 	
 	//RESERVE MEMORY FOR STATS
 	printf("RESERVE MEMORY\n");
@@ -175,21 +185,17 @@ int TCPConnect(thread_context_t ctx, const char* src_ip, const char* dst_ip, int
 	struct sockaddr_in *addr = calloc(1,sizeof(struct sockaddr_in));
 	
 	memset(&ctx->wvars[sockid], 0, sizeof(struct wget_vars));
-	printf("mtcp_setsock_nonblock...\n");
-	int ret = mtcp_setsock_nonblock(ctx->mctx, sockid);
-	if (ret < 0) {
-		exit(-1);
-	}
 	
 	//SET PORT IPCONFIG
 	addr->sin_family = AF_INET;
 	addr->sin_addr.s_addr = inet_addr(dst_ip);
 	addr->sin_port = port;
-	
+
+
 	//CONNECT
 	//mctx, socket_id, struct sockaddr*, struct sockaddr_in/out size
 	printf("CONNECTING...\n");
-	ret = mtcp_connect(ctx->mctx, sockid, (struct sockaddr *)addr, sizeof(struct sockaddr_in));
+	int ret = mtcp_connect(ctx->mctx, sockid, (struct sockaddr *)addr, sizeof(struct sockaddr_in));
 	printf("CONNECTED: %i\n", ret);
 	if (ret < 0) {
 		mtcp_close(ctx->mctx, sockid);
