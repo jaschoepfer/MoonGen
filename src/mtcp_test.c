@@ -215,30 +215,6 @@ int TCPConnect(thread_context_t ctx, const char* src_ip, const char* dst_ip, int
 	return sockid;
 }
 
-void* SlaveMain(void* args)
-{
-	struct thread_args th_args = *(struct thread_args*)args;
-	thread_context_t ctx = CreateContext(th_args.core);
-	//int sockid = TCPConnect(ctx, th_args.ip, th_args.port);
-	
-	//set the payload
-	const char* buffer = "2357";
-	int len = 4;
-	
-	//send many packets
-	int i = 0;
-	int packetCount = 1000;
-	while(i++ < packetCount)
-	{
-//		mtcp_write(ctx->mctx, sockid, buffer, len);
-	}
-	
-	DestroyContext(ctx);
-
-	pthread_exit(NULL);
-	return NULL;
-}
-
 int TCPSend(thread_context_t ctx, int socket, const char* buffer, int len)
 {
 	return mtcp_write(ctx->mctx, socket, buffer, len);

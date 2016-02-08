@@ -11,8 +11,8 @@ function master(...)
 	--	return log:info("usage: txPort rxPort [rate [flows [pktSize]]]")
 	--end
 	
-	src_ip = "10.0.13.3"
-	dst_ip = "10.0.13.4"
+	src_ip = "10.0.0.3"
+	dst_ip = "10.0.0.4"
 	port = 6112
 	
 	flows = flows or 4
