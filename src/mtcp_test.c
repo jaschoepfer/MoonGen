@@ -219,31 +219,3 @@ int TCPSend(thread_context_t ctx, int socket, const char* buffer, int len)
 {
 	return mtcp_write(ctx->mctx, socket, buffer, len);
 }
-
-int MTCP_TEST_main()
-{
-	const char* ip = "10.0.0.1";
-	int port = 2200;
-	
-	int i;
-	//Create Threads for every CORE
-	for (i = 0; i < MAX_CORES; i++) {
-
-		struct thread_args th_args;
-		th_args.ip = ip;
-		th_args.port = port;
-		th_args.core = i;
-		if (pthread_create(&app_thread[i], 
-					NULL, SlaveMain, (void *)&th_args)) {
-			exit(-1);
-		}
-	}
-	
-	//Join all threads
-	for (i = 0; i < MAX_CORES; i++) {
-		pthread_join(app_thread[i], NULL);
-	}
-
-	mtcp_destroy();
-	return 0;
-}
