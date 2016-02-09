@@ -85,6 +85,26 @@ struct wget_vars
 	int fd;
 };
 
+/* <EPOLL FUNCTION WRAPPERS> */
+
+int epoll_create(struct mtcp_context *mctx, int size)
+{
+	return mtcp_epoll_create(mctx, size);
+}
+
+int epoll_wait(struct mtcp_context *mctx, int epollid, struct mtcp_epoll_event *events, int maxevents, int timeout)
+{
+	return mtcp_epoll_wait(mctx, epollid, events, maxevents, timeout)
+}
+
+int epoll_ctl(struct mtcp_context *mctx, int epollid, int op, int sockid, struct mtcp_epoll_event *event)
+{
+	return mtcp_epoll_ctl(mctx, epollid, op, sockid, event)
+}
+
+/* </EPOLL FUNCTION WRAPPERS> */
+
+/*complex wrappers to be made obsolete*/
 thread_context_t CreateContext(int core)
 {
 	thread_context_t ctx;
