@@ -18,6 +18,8 @@
 #include <mtcp_api.h>
 #include <mtcp_epoll.h>
 
+#define MAX_IP_STR_LEN 16
+
 /* OBSOLETE *
 struct wget_stat
 {
@@ -80,8 +82,6 @@ struct mtcp_context
 	int cpu;
 };
 typedef struct mtcp_context* mctx_t;
-
-typedef struct in_addr* in_addr_t;
  * </STRUCTS AND TYPEDEFS> * ALREADY INCLUDED */
 
 /* <EPOLL FUNCTION WRAPPERS> * UNSUPPORTED *
@@ -115,12 +115,12 @@ int mg_tcp_socket(mctx_t mctx, int domain, int type, int protocol)
 	return mtcp_socket(mctx, domain, type, protocol);
 }
 
-int mg_tcp_connect(mctx_t mctx, int sockid, const struct sockaddr_in *addr, socklen_t addrlen)
+int mg_tcp_connect(mctx_t mctx, int sockid, const struct sockaddr *addr, socklen_t addrlen)
 {
-	return mtcp_connect(mctx, sockid,(struct sockaddr *)addr, addrlen);
+	return mtcp_connect(mctx, sockid, addr, addrlen);
 }
 
-int mg_tcp_write(mctx_t mctx, int sockid, char *buf, int len)
+int mg_tcp_write(mctx_t mctx, int sockid, const char *buf, int len)
 {
 	return mtcp_write(mctx, sockid, buf, len);
 }
@@ -129,17 +129,66 @@ int mg_tcp_read(mctx_t mctx, int sockid, char *buf, int len)
 {
 	return mtcp_read(mctx, sockid, buf, len);
 }
+
+int mg_tcp_close(mctx_t mctx, int sockid)
+{
+	return mtcp_close(mctx, sockid);
+}
 /* </BSD SOCKET INTERFACE> */
 
+/* <MEMORY ALLOCATION & BYTE ORDER> */
+struct sockaddr *mg_alloc_sockaddr(short family, short port, const char *ip_addr)
+{
+	struct sockaddr_in *saddr;
+   	saddr = (struct sockaddr_in *)calloc(1, sizeof(struct sockaddr_in));
+	saddr->sin_family = family;
+	saddr->sin_port = htons(port); //convert port to network byteorder
+	if(!inet_aton(ip_addr, &(saddr->sin_addr))) //convert ip to binary and network byteorder
+		printf("alloc_sockaddr: inet_aton(%s) failed\n", ip_addr);
+	//saddr->sin_zero = sin_zero; //TODO:allow setting of this variable (for arcane magic presumably)
+	return (struct sockaddr *)saddr;
+}
+
+socklen_t size_sockaddr_in()
+{
+	return sizeof(struct sockaddr_in);
+}
+
+in_addr_t mg_ipaddr_hton(const char* ip_addr)
+{
+	struct in_addr addr;
+	int ret = inet_aton(ip_addr, &addr);
+	if(!ret)
+		printf("mg_ipaddr_hton: inet_aton(%s) failed\n", ip_addr);
+	return addr.s_addr;
+}
+
+in_addr_t mg_port_hton(int port)
+{
+	return htonl(port);
+}
+
+/*allocates a buffer with a fixed size from a string constant or literal*/
+char *mg_alloc_buffer(const char *src, int offset, int size)
+{
+	char *buf = calloc(size, sizeof(char));
+	strncpy(buf, src + offset, size);
+	return buf;
+}
+/* </MEMORY ALLOCATION & BYTE ORDER> */
+
 /* <MTCP INITIALIZATION> */
-int mg_tcp_init(char *config_file)
+int mg_mtcp_init(const char *config_file)
 {
 	return mtcp_init(config_file);
 }
 
 mctx_t mg_tcp_create_context(int core)
 {
-	    return mtcp_create_context(core);
+	mctx_t mctx = mtcp_create_context(core);
+	if(!mctx)
+		printf("mtcp_create_context failed!\n");
+	return mctx;
 }
 
 int mg_init_rss(mctx_t mctx, in_addr_t saddr_base, int num_addr, in_addr_t daddr, in_addr_t dport)
@@ -147,6 +196,13 @@ int mg_init_rss(mctx_t mctx, in_addr_t saddr_base, int num_addr, in_addr_t daddr
 	return mtcp_init_rss(mctx, saddr_base, num_addr, daddr, dport);
 }
 /* </MTCP INITIALIZATION> */
+
+/* <MTCP CLEANUP> */
+void mg_tcp_destroy_context(mctx_t mctx)
+{
+	mtcp_destroy_context(mctx);
+}
+/* </MTCP CLEANUP> */
 
 /*complex wrappers obsolete*
 void DestroyContext(thread_context_t ctx) 
