@@ -7,4 +7,5 @@
 	url = https://github.com/scholzd/doxygen-lua.git
 [submodule "deps/mtcp"]
 	path = deps/mtcp
-	url = https://github.com/eunyoung14/mtcp.git
+	url = https://github.com/jaschoepfer/mtcp.git
+	branch = MoonGenCompatible 
