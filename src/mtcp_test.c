@@ -18,19 +18,7 @@
 #include <mtcp_api.h>
 #include <mtcp_epoll.h>
 
-//GLOBALS
-#define MAX_CORES 4
-
-static pthread_t app_thread[MAX_CORES];
-static mctx_t g_mctx[MAX_CORES];
-
-struct thread_args
-{
-	const char* ip;
-	int port;
-	int core;
-};
-
+/* OBSOLETE *
 struct wget_stat
 {
 	uint64_t waits;
@@ -84,50 +72,83 @@ struct wget_vars
 	
 	int fd;
 };
+ * OBSOLETE */
 
-/* <EPOLL FUNCTION WRAPPERS> */
+/* <STRUCTS AND TYPEDEFS> * ALREADY INCLUDED *
+struct mtcp_context
+{
+	int cpu;
+};
+typedef struct mtcp_context* mctx_t;
 
-int epoll_create(struct mtcp_context *mctx, int size)
+typedef struct in_addr* in_addr_t;
+ * </STRUCTS AND TYPEDEFS> * ALREADY INCLUDED */
+
+/* <EPOLL FUNCTION WRAPPERS> * UNSUPPORTED *
+int mg_epoll_create(mctx_t mctx, int size)
 {
 	return mtcp_epoll_create(mctx, size);
 }
 
-int epoll_wait(struct mtcp_context *mctx, int epollid, struct mtcp_epoll_event *events, int maxevents, int timeout)
+int mg_epoll_wait(mctx_t mctx, int epollid, int maxevents, int timeout)
 {
-	return mtcp_epoll_wait(mctx, epollid, events, maxevents, timeout)
+	struct mtcp_epoll_event *events = (struct mtcp_epoll_event *)calloc(maxevents, sizeof(struct mtcp_epoll_event));
+	return mtcp_epoll_wait(mctx, epollid, events, maxevents, timeout);
 }
 
-int epoll_ctl(struct mtcp_context *mctx, int epollid, int op, int sockid, struct mtcp_epoll_event *event)
+int mg_epoll_ctl(mctx_t mctx, int epollid, int op, int sockid, struct mtcp_epoll_event *event)
 {
-	return mtcp_epoll_ctl(mctx, epollid, op, sockid, event)
+	return mtcp_epoll_ctl(ctx->mctx, epollid, op, sockid, event);
+}
+ * </EPOLL FUNCTION WRAPPERS> * UNSUPPORTED */
+
+/* <SOCKET FLAG SETTERS> * UNSUPPORTED *
+int mg_setsock_nonblock(mctx_t mctx, int sockid)
+{
+	return mtcp_setsock_nonblock(mctx, sockid);
+}
+ * </SOCKET FLAG SETTERS> * UNSUPPORTED */
+
+/* <BSD SOCKET INTERFACE> */
+int mg_tcp_socket(mctx_t mctx, int domain, int type, int protocol)
+{
+	return mtcp_socket(mctx, domain, type, protocol);
 }
 
-/* </EPOLL FUNCTION WRAPPERS> */
-
-/*complex wrappers to be made obsolete*/
-thread_context_t CreateContext(int core)
+int mg_tcp_connect(mctx_t mctx, int sockid, const struct sockaddr_in *addr, socklen_t addrlen)
 {
-	thread_context_t ctx;
-
-	ctx = (thread_context_t)calloc(1, sizeof(struct thread_context));
-	if (!ctx) {
-		return NULL;
-	}
-	ctx->core = core;
-	
-	
-	ctx->mctx = mtcp_create_context(core);
-	if (!ctx->mctx) {
-		return NULL;
-	}
-	ctx->wvar_size = 1;
-	ctx->wvars = (struct wget_vars*)calloc(ctx->wvar_size, sizeof(struct wget_vars));
-	
-	g_mctx[core] = ctx->mctx;
-
-	return ctx;
+	return mtcp_connect(mctx, sockid,(struct sockaddr *)addr, addrlen);
 }
 
+int mg_tcp_write(mctx_t mctx, int sockid, char *buf, int len)
+{
+	return mtcp_write(mctx, sockid, buf, len);
+}
+
+int mg_tcp_read(mctx_t mctx, int sockid, char *buf, int len)
+{
+	return mtcp_read(mctx, sockid, buf, len);
+}
+/* </BSD SOCKET INTERFACE> */
+
+/* <MTCP INITIALIZATION> */
+int mg_tcp_init(char *config_file)
+{
+	return mtcp_init(config_file);
+}
+
+mctx_t mg_tcp_create_context(int core)
+{
+	    return mtcp_create_context(core);
+}
+
+int mg_init_rss(mctx_t mctx, in_addr_t saddr_base, int num_addr, in_addr_t daddr, in_addr_t dport)
+{
+	return mtcp_init_rss(mctx, saddr_base, num_addr, daddr, dport);
+}
+/* </MTCP INITIALIZATION> */
+
+/*complex wrappers obsolete*
 void DestroyContext(thread_context_t ctx) 
 {
 	mtcp_destroy_context(ctx->mctx);
@@ -157,17 +178,18 @@ int SetSocketNonBlock(thread_context_t ctx, int sockId)
 	int ret = mtcp_setsock_nonblock(ctx->mctx, sockId);
 	if (ret < 0) {
 		printf("ERROR: Unable to set socket to \"nonblock\"\n"); 
-		return -1;
 	}
 	return ret;
 }
+
+
 
 int TCPConnect(thread_context_t ctx, const char* src_ip, const char* dst_ip, int port)
 {
 	int flows = 1;
 	int maxevents = 900;
 	
-	int ep;
+	//int ep;
 	if(!ctx)
 		printf("ERROR: thread_context is NULL\n");
 	printf("core=%i", ctx->core);
@@ -178,7 +200,10 @@ int TCPConnect(thread_context_t ctx, const char* src_ip, const char* dst_ip, int
 	if (sockid < 0) {
 		return -1;
 	} 
-	
+
+	//set non-blocking
+	//mtcp_setsock_nonblock(ctx->mctx, sockid);
+
 	//RESERVE MEMORY FOR STATS
 	printf("RESERVE MEMORY\n");
 	printf("sockid=%i\n", sockid);
@@ -194,8 +219,8 @@ int TCPConnect(thread_context_t ctx, const char* src_ip, const char* dst_ip, int
 	mtcp_init_rss(ctx->mctx, inet_addr(src_ip), flows, inet_addr(dst_ip), port);
 	ctx->target = flows;
 	
-	ep = mtcp_epoll_create(ctx->mctx, maxevents);
-	ctx->ep = ep;
+	//ep = mtcp_epoll_create(ctx->mctx, maxevents);
+	//ctx->ep = ep;
 	
 	ctx->started = ctx->done = ctx->pending = 0;
 	ctx->errors = ctx->incompletes = 0;
@@ -230,7 +255,7 @@ int TCPConnect(thread_context_t ctx, const char* src_ip, const char* dst_ip, int
 	//POLL EVENTS
 	ev.events = MTCP_EPOLLOUT;
 	ev.data.sockid = sockid;
-	mtcp_epoll_ctl(ctx->mctx, ctx->ep, MTCP_EPOLL_CTL_ADD, sockid, &ev);
+	//mtcp_epoll_ctl(ctx->mctx, ctx->ep, MTCP_EPOLL_CTL_ADD, sockid, &ev);
 	
 	return sockid;
 }
@@ -239,3 +264,4 @@ int TCPSend(thread_context_t ctx, int socket, const char* buffer, int len)
 {
 	return mtcp_write(ctx->mctx, socket, buffer, len);
 }
+*complex wrappers obsolete*/

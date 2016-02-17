@@ -42,9 +42,17 @@ function loadSlave(size, src_ip, dst_ip, port, context)
 	end)
 	local payload = mem:bufArray()
 	--]]
-	local payload = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	
+	--local payload = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	log:info("establishing socket...")
+	
+
+	--local epollid = mtcp.mg_epoll_create(context, 200)
 	local socket = mtcp.TCPConnect(context, src_ip, dst_ip, port)
+	--local nevents = mtcp.mg_epoll_wait(context, epollid, 3, -1)	
+	
+	--log:info("epoll_wait: nevents=" .. nevents)
+
 	local counter = 0
 	log:info("start sending AAAAA spam...")
 	while counter < 100 do
